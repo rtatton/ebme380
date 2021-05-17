@@ -1,21 +1,21 @@
 import json
 
-import attr
 import serial
 
 
-@attr.s(slots=True)
 class Arduino:
-	port = attr.ib(type=str, default='COM7', kw_only=True)
-	baud_rate = attr.ib(type=int, default=9600, kw_only=True)
-	timeout = attr.ib(type=float, default=15.05, kw_only=True)
-	_device = attr.ib(type=serial.Serial, init=False, repr=False)
+	__slots__ = ('port', 'baud_rate', 'timeout', '_device')
 
-	def __attrs_post_init__(self):
+	def __init__(
+			self,
+			port: str = 'COM7',
+			baud_rate: int = 9600,
+			timeout: float = 15.05):
+		self.port = port
+		self.baud_rate = baud_rate
+		self.timeout = timeout
 		self._device = serial.Serial(
-			port=self.port,
-			baudrate=self.baud_rate,
-			timeout=self.timeout)
+			port=port, baudrate=baud_rate, timeout=timeout)
 
 	def stream(self):
 		while True:
