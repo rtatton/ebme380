@@ -31,7 +31,11 @@ class Subencoder(layers.Layer):
 			**kwargs)
 		self.pool = layers.MaxPooling1D(pool_size=pool_size, **kwargs)
 
+	# Good, except for the training/inference design
+	# As of now, assumes that once trained, now source data is used
 	def call(self, inputs, training=None, **kwargs):
+		# TODO See https://arthurdouillard.com/post/incremental-learning/ for
+		#  how we can incrementally train over time
 		if training:
 			source, target = inputs
 			src_conv, tar_conv = (self.conv(source), self.conv(target))
