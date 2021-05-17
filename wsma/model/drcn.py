@@ -1,85 +1,71 @@
-import numbers
-from typing import Callable, Union
-
 from tensorflow import keras
 from tensorflow.keras import activations, layers, regularizers
 
-Activation = Union[Callable[..., numbers.Real], str]
-Regularizer = Union[Callable[..., numbers.Real], str]
-
-
-# TODO Some hyper-parameters not specified by the paper
-#   L2 factor
-#   Recurrent cell type
 
 class Subencoder(layers.Layer):
 	def __init__(
 			self,
-			*,
-			filters: int = 90,
-			pool_size: int = 5,
-			activation: Activation = activations.relu,
-			bias_regularizer: Regularizer = regularizers.L2,
-			kernel_regularizer: Regularizer = regularizers.L2,
+			conv_padding: str = 'causal',
+			pool_padding: str = 'valid',
 			**kwargs):
 		super(Subencoder, self).__init__(**kwargs)
-		self.conv = layers.Conv1D(
-			filters=filters,
-			activation=activation,
-			bias_regularizer=bias_regularizer,
-			kernel_regularizer=kernel_regularizer,
-			**kwargs)
-		self.pool = layers.MaxPooling1D(pool_size=pool_size, **kwargs)
+		self.conv = layers.Conv1D(padding=conv_padding, **kwargs)
+		self.pool = layers.MaxPooling1D(padding=pool_padding, **kwargs)
 
-	# Good, except for the training/inference design
-	# As of now, assumes that once trained, now source data is used
 	def call(self, inputs, training=None, **kwargs):
-		# TODO See https://arthurdouillard.com/post/incremental-learning/ for
-		#  how we can incrementally train over time
 		if training:
 			source, target = inputs
-			src_conv, tar_conv = (self.conv(source), self.conv(target))
-			pooled = (self.pool(src_conv), self.pool(tar_conv))
+			source, target = self.conv(source), self.conv(target)
+			pooled = (self.pool(source), self.pool(target))
 		else:
-			tar_conv = self.conv(inputs)
-			pooled = self.pool(tar_conv)
-		return tar_conv, pooled
+			target = inputs
+			target = self.conv(target)
+			pooled = self.pool(target)
+		return target, pooled
 
 
 class Encoder(layers.Layer):
 	def __init__(
 			self,
-			*,
-			stddev: numbers.Real = 0.1,
 			filters: int = 90,
+			kernel_size: int = 10,
 			pool_size: int = 5,
-			activation: Activation = activations.relu,
-			bias_regularizer: Regularizer = regularizers.L2,
-			kernel_regularizer: Regularizer = regularizers.L2,
+			conv_padding: str = 'causal',
+			pool_padding: str = 'valid',
+			activation=activations.relu,
+			kernel_initializer=keras.initializers.glorot_uniform,
+			kernel_regularizer=regularizers.L2,
+			bias_regularizer=regularizers.L2,
+			activity_regularizer=regularizers.L2,
+			noise_stddev: float = 0.1,
 			**kwargs):
 		super(Encoder, self).__init__(**kwargs)
-		self.noise = layers.GaussianNoise(stddev=stddev, **kwargs)
-		self.encode1 = Subencoder(
-			filters=filters,
-			pool_size=pool_size,
-			activation=activation,
-			bias_regularizer=bias_regularizer,
-			kernel_regularizer=kernel_regularizer,
-			**kwargs)
-		self.encode2 = Subencoder(
-			filters=filters,
-			pool_size=pool_size,
-			activation=activation,
-			bias_regularizer=bias_regularizer,
-			kernel_regularizer=kernel_regularizer,
-			**kwargs)
+		self.noise = layers.GaussianNoise(stddev=noise_stddev, **kwargs)
+		encoder_kwargs = {
+			'filters': filters,
+			'kernel_size': kernel_size,
+			'pool_size': pool_size,
+			'conv_padding': conv_padding,
+			'pool_padding': pool_padding,
+			'activation': activation,
+			'kernel_initializer': kernel_initializer,
+			'kernel_regularizer': kernel_regularizer,
+			'bias_regularizer': bias_regularizer,
+			'activity_regularizer': activity_regularizer}
+		self.encode1 = Subencoder(**encoder_kwargs, **kwargs)
+		self.encode2 = Subencoder(**encoder_kwargs, **kwargs)
 
 	def call(self, inputs, training=None, **kwargs):
-		source, target = inputs
-		fuzzy = (self.noise(source), self.noise(target))
-		target1, pooled = self.encode1(fuzzy, training=training)
-		target2, pooled = self.encode2(pooled, training=training)
-		return (target1, target2), pooled
+		if training:
+			source, target = inputs
+			inputs = (self.noise(source), self.noise(target))
+			target, pooled = self.encode1(inputs, training=training)
+			target, pooled = self.encode2(pooled, training=training)
+		else:
+			target = inputs
+			target, pooled = self.encode1(target, training=training)
+			target, pooled = self.encode2(pooled, training=training)
+		return target, pooled
 
 
 class Subdecoder(layers.Layer):
@@ -90,7 +76,6 @@ class Subdecoder(layers.Layer):
 		super(Subdecoder, self).__init__(**kwargs)
 		self.conv = layers.Conv1D(filters=filters, **kwargs)
 		self.cat = layers.Concatenate()
-		# TODO Should be upsampled at the same rate as downsampled by encoder
 		self.up_sample = layers.UpSampling1D()
 
 	def call(self, inputs, **kwargs):
