@@ -1,15 +1,17 @@
 from tensorflow import keras
 from tensorflow.keras import activations, layers, regularizers
 
+L2 = regularizers.l2(0.01)
+
 
 def create_conv1d():
 	return layers.Conv1D(
 		filters=90,
 		kernel_size=10,
 		activation=activations.relu,
-		kernel_regularizer=regularizers.l2,
-		bias_regularizer=regularizers.l2,
-		activity_regularizer=regularizers.l2)
+		kernel_regularizer=L2,
+		bias_regularizer=L2,
+		activity_regularizer=L2)
 
 
 class _Subencoder(layers.Layer):
@@ -86,9 +88,9 @@ class Classifier(layers.Layer):
 		super(Classifier, self).__init__(**kwargs)
 		self.rnn = layers.Bidirectional(layers.GRU(
 			units=80,
-			kernel_regularizer=regularizers.l2,
-			recurrent_regularizer=regularizers.l2,
-			activity_regularizer=regularizers.l2))
+			kernel_regularizer=L2,
+			recurrent_regularizer=L2,
+			activity_regularizer=L2))
 		self.classify = layers.Activation(activations.sigmoid)
 
 	def call(self, inputs, **kwargs):
