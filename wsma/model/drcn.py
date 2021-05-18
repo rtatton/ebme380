@@ -2,119 +2,98 @@ from tensorflow import keras
 from tensorflow.keras import activations, layers, regularizers
 
 
-class Subencoder(layers.Layer):
-	def __init__(
-			self,
-			conv_padding: str = 'causal',
-			pool_padding: str = 'valid',
-			**kwargs):
-		super(Subencoder, self).__init__(**kwargs)
-		self.conv = layers.Conv1D(padding=conv_padding, **kwargs)
-		self.pool = layers.MaxPooling1D(padding=pool_padding, **kwargs)
+def create_conv1d():
+	return layers.Conv1D(
+		filters=90,
+		kernel_size=10,
+		activation=activations.relu,
+		kernel_regularizer=regularizers.l2,
+		bias_regularizer=regularizers.l2,
+		activity_regularizer=regularizers.l2)
+
+
+class _Subencoder(layers.Layer):
+	def __init__(self, **kwargs):
+		super(_Subencoder, self).__init__(**kwargs)
+		self.conv = create_conv1d()
+		self.pool = layers.MaxPooling1D(pool_size=5)
 
 	def call(self, inputs, training=None, **kwargs):
 		if training:
 			source, target = inputs
-			source, target = self.conv(source), self.conv(target)
-			pooled = (self.pool(source), self.pool(target))
+			source, convolved = self.conv(source), self.conv(target)
+			pooled = (self.pool(source), self.pool(convolved))
+			result = (pooled, convolved)
 		else:
-			target = inputs
-			target = self.conv(target)
-			pooled = self.pool(target)
-		return target, pooled
+			convolved = self.conv(inputs)
+			result = self.pool(convolved)
+		return result
 
 
 class Encoder(layers.Layer):
-	def __init__(
-			self,
-			filters: int = 90,
-			kernel_size: int = 10,
-			pool_size: int = 5,
-			conv_padding: str = 'causal',
-			pool_padding: str = 'valid',
-			activation=activations.relu,
-			kernel_initializer=keras.initializers.glorot_uniform,
-			kernel_regularizer=regularizers.L2,
-			bias_regularizer=regularizers.L2,
-			activity_regularizer=regularizers.L2,
-			noise_stddev: float = 0.1,
-			**kwargs):
+	def __init__(self, **kwargs):
 		super(Encoder, self).__init__(**kwargs)
-		self.noise = layers.GaussianNoise(stddev=noise_stddev, **kwargs)
-		encoder_kwargs = {
-			'filters': filters,
-			'kernel_size': kernel_size,
-			'pool_size': pool_size,
-			'conv_padding': conv_padding,
-			'pool_padding': pool_padding,
-			'activation': activation,
-			'kernel_initializer': kernel_initializer,
-			'kernel_regularizer': kernel_regularizer,
-			'bias_regularizer': bias_regularizer,
-			'activity_regularizer': activity_regularizer}
-		self.encode1 = Subencoder(**encoder_kwargs, **kwargs)
-		self.encode2 = Subencoder(**encoder_kwargs, **kwargs)
+		self.noise = layers.GaussianNoise(stddev=0.1)
+		self.encode1 = _Subencoder(**kwargs)
+		self.encode2 = _Subencoder(**kwargs)
 
 	def call(self, inputs, training=None, **kwargs):
 		if training:
 			source, target = inputs
 			inputs = (self.noise(source), self.noise(target))
-			target, pooled = self.encode1(inputs, training=training)
-			target, pooled = self.encode2(pooled, training=training)
+			pooled, convolved1 = self.encode1(inputs, training=training)
+			pooled, convolved2 = self.encode2(pooled, training=training)
+			result = (pooled, (convolved1, convolved2))
 		else:
-			target = inputs
-			target, pooled = self.encode1(target, training=training)
-			target, pooled = self.encode2(pooled, training=training)
-		return target, pooled
+			pooled = self.encode1(inputs, training=training)
+			result = self.encode2(pooled, training=training)
+		return result
 
 
-class Subdecoder(layers.Layer):
-	def __init__(
-			self,
-			filters: int = 90,
-			**kwargs):
-		super(Subdecoder, self).__init__(**kwargs)
-		self.conv = layers.Conv1D(filters=filters, **kwargs)
+class _Subdecoder(layers.Layer):
+	def __init__(self, **kwargs):
+		super(_Subdecoder, self).__init__(**kwargs)
+		self.conv = create_conv1d()
 		self.cat = layers.Concatenate()
-		self.up_sample = layers.UpSampling1D()
+		# TODO What is it?
+		self.up_sample = layers.UpSampling1D(size=None)
 
-	def call(self, inputs, **kwargs):
-		encoded, convolved = inputs
-		convolved = self.conv(convolved)
-		concatenated = self.cat(convolved, encoded)
-		return self.up_sample(concatenated)
+	def call(self, inputs, training=None, **kwargs):
+		if training:
+			pooled_or_up_sampled, convolved = inputs
+			convolved = self.conv(pooled_or_up_sampled)
+			concatenated = self.cat(pooled_or_up_sampled, convolved)
+			return self.up_sample(concatenated)
 
 
 class Decoder(layers.Layer):
-	def __init__(self, filters: int = 90, **kwargs):
+	def __init__(self, **kwargs):
 		super(Decoder, self).__init__(**kwargs)
-		self.decode1 = Subdecoder(filters=filters, **kwargs)
-		self.decode2 = Subdecoder(filters=filters, **kwargs)
-		self.conv = layers.Conv1D(filters=filters, **kwargs)
+		self.decode1 = _Subdecoder(**kwargs)
+		self.decode2 = _Subdecoder(**kwargs)
+		self.conv = create_conv1d()
 
-	def call(self, inputs, **kwargs):
-		(target1, target2), pooled = inputs
-		decoded1 = self.decode1((pooled, target1))
-		decoded2 = self.decode1((decoded1, target2))
-		return self.conv(decoded2)
+	def call(self, inputs, training=None, **kwargs):
+		if training:
+			pooled, (convolved1, convolved2) = inputs
+			up_sampled = self.decode1((pooled, convolved1))
+			up_sampled = self.decode2((up_sampled, convolved2))
+			return self.conv(up_sampled)
 
 
 class Classifier(layers.Layer):
-	def __init__(
-			self,
-			units: int = 80,
-			*,
-			activation: Activation = activations.relu,
-			**kwargs):
+	def __init__(self, **kwargs):
 		super(Classifier, self).__init__(**kwargs)
-		rnn = layers.GRU(units=units, activation=activation)
-		self.rnn = layers.Bidirectional(rnn)
-		# TODO Change to softmax if multi-class, instead of binary
+		self.rnn = layers.Bidirectional(layers.GRU(
+			units=80,
+			kernel_regularizer=regularizers.l2,
+			recurrent_regularizer=regularizers.l2,
+			activity_regularizer=regularizers.l2))
 		self.classify = layers.Activation(activations.sigmoid)
 
 	def call(self, inputs, **kwargs):
-		seq = self.rnn(inputs)
-		return self.classify(seq)
+		sequence = self.rnn(inputs)
+		return self.classify(sequence)
 
 
 class DRCN(keras.Model):
@@ -125,11 +104,16 @@ class DRCN(keras.Model):
 		self.decode = Decoder(**kwargs)
 		self.classify = Classifier(**kwargs)
 
-	def call(self, inputs, **kwargs):
-		encoded = self.encode(inputs)
-		decoded = self.decode(encoded)
-		classified = self.classify(encoded)
-		return classified, decoded
+	def call(self, inputs, training=None, **kwargs):
+		if training:
+			(source_pooled, target_pooled), convolved = self.encode(inputs)
+			decoded = self.decode(target_pooled, convolved)
+			classified = self.classify(source_pooled)
+			result = (classified, decoded)
+		else:
+			encoded = self.encode(inputs)
+			result = self.classify(encoded)
+		return result
 
 	def get_config(self):
 		return super(DRCN, self).get_config()
