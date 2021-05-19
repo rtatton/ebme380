@@ -1,3 +1,7 @@
+dash==1.20.0
+pandas==1.2.4
+plotly==4.14.3
+numpy==1.19.5
 tensorflow==2.4.1
-attrs==21.2.0
+scipy==1.6.3
 pyserial==3.5
