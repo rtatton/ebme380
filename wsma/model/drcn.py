@@ -1,7 +1,8 @@
 from tensorflow import keras
 from tensorflow.keras import activations, layers, regularizers
 
-L2 = regularizers.l2(0.01)
+L2 = regularizers.l2()
+SAMPLING_RATE = 5
 
 
 def create_conv1d():
@@ -18,7 +19,7 @@ class _Subencoder(layers.Layer):
 	def __init__(self, **kwargs):
 		super(_Subencoder, self).__init__(**kwargs)
 		self.conv = create_conv1d()
-		self.pool = layers.MaxPooling1D(pool_size=5)
+		self.pool = layers.MaxPooling1D(pool_size=SAMPLING_RATE)
 
 	def call(self, inputs, training=None, **kwargs):
 		if training:
@@ -32,9 +33,9 @@ class _Subencoder(layers.Layer):
 		return result
 
 
-class Encoder(layers.Layer):
+class _Encoder(layers.Layer):
 	def __init__(self, **kwargs):
-		super(Encoder, self).__init__(**kwargs)
+		super(_Encoder, self).__init__(**kwargs)
 		self.noise = layers.GaussianNoise(stddev=0.1)
 		self.encode1 = _Subencoder(**kwargs)
 		self.encode2 = _Subencoder(**kwargs)
@@ -57,8 +58,7 @@ class _Subdecoder(layers.Layer):
 		super(_Subdecoder, self).__init__(**kwargs)
 		self.conv = create_conv1d()
 		self.cat = layers.Concatenate()
-		# TODO What is it?
-		self.up_sample = layers.UpSampling1D(size=None)
+		self.up_sample = layers.UpSampling1D(size=SAMPLING_RATE)
 
 	def call(self, inputs, training=None, **kwargs):
 		if training:
@@ -68,9 +68,9 @@ class _Subdecoder(layers.Layer):
 			return self.up_sample(concatenated)
 
 
-class Decoder(layers.Layer):
+class _Decoder(layers.Layer):
 	def __init__(self, **kwargs):
-		super(Decoder, self).__init__(**kwargs)
+		super(_Decoder, self).__init__(**kwargs)
 		self.decode1 = _Subdecoder(**kwargs)
 		self.decode2 = _Subdecoder(**kwargs)
 		self.conv = create_conv1d()
@@ -83,9 +83,9 @@ class Decoder(layers.Layer):
 			return self.conv(up_sampled)
 
 
-class Classifier(layers.Layer):
+class _Classifier(layers.Layer):
 	def __init__(self, **kwargs):
-		super(Classifier, self).__init__(**kwargs)
+		super(_Classifier, self).__init__(**kwargs)
 		self.rnn = layers.Bidirectional(layers.GRU(
 			units=80,
 			kernel_regularizer=L2,
@@ -99,12 +99,21 @@ class Classifier(layers.Layer):
 
 
 class DRCN(keras.Model):
+	"""Deep reconstruction classification network.
+
+	References:
+		A. Saeed, T. Ozcelebi, J. Lukkien, J. B. F. van Erp and S. Trajanovski,
+		"Model Adaptation and Personalization for Physiological Stress
+		Detection," 2018 IEEE 5th International Conference on Data Science and
+		Advanced Analytics (DSAA), 2018, pp. 209-216,
+		doi: 10.1109/DSAA.2018.00031.
+	"""
 
 	def __init__(self, **kwargs):
 		super(DRCN, self).__init__(**kwargs)
-		self.encode = Encoder(**kwargs)
-		self.decode = Decoder(**kwargs)
-		self.classify = Classifier(**kwargs)
+		self.encode = _Encoder(**kwargs)
+		self.decode = _Decoder(**kwargs)
+		self.classify = _Classifier(**kwargs)
 
 	def call(self, inputs, training=None, **kwargs):
 		if training:

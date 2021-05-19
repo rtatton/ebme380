@@ -16,3 +16,7 @@ def sinusoid(
 	x = np.linspace(start, stop, n)
 	noise *= rng.normal(size=(n,))
 	return x, np.sin(freq * (x + offset)) + noise
+
+
+def stress(p=0.5):
+	return rng.choice((False, True), p=(1 - p, p))

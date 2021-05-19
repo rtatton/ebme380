@@ -3,7 +3,8 @@ import json
 import serial
 
 
-class Arduino:
+class WearableDevice:
+	"""Data access object for the data streaming from the wearable device."""
 	__slots__ = ('port', 'baud_rate', 'timeout', '_device')
 
 	def __init__(
@@ -17,12 +18,13 @@ class Arduino:
 		self._device = serial.Serial(
 			port=port, baudrate=baud_rate, timeout=timeout)
 
-	def stream(self):
+	def __call__(self):
 		while True:
-			yield json.loads(self._device.readline())
+			if (line := self._device.readline()) is not None:
+				yield json.loads(line)
 
 
 if __name__ == '__main__':
-	device = Arduino()
-	for data in device.stream():
+	device = WearableDevice()
+	for data in device():
 		print(data)

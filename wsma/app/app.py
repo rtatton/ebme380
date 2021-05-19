@@ -13,9 +13,15 @@ SUCCESS = None
 UPDATE = 1
 CONNECT = 2
 REMOVE = 3
+GREEN = '#00B227'
+RED = '#FD0000'
+WHITE = '#F9F9F9'
+HIGH = 'HIGH'
+LOW = 'LOW'
+STRESS_SIZE = 48
 ERROR = dash.no_update
 app = dash.Dash(__name__, external_stylesheets=STYLE)
-# TODO(rdt17) Refactor to not be globals
+# TODO Refactor to not be globals
 p2d = {}
 d2p = {}
 last_btn = None
@@ -86,6 +92,17 @@ def make_plots(*dfs: pd.DataFrame):
 			title=title,
 			labels={x_label: x_label, title: ''}))
 	return figs
+
+
+def stress_level():
+	return html.Div([
+		html.H5(
+			'Stress Level',
+			id='text_stress_label'),
+		html.H6(
+			'',
+			id='text_stress_value',
+			style={'color': WHITE})])
 
 
 def plots():
@@ -172,6 +189,21 @@ def update_plots(out, err):
 		return make_plots(hr, edr)
 
 
+@app.callback(
+	Output('text_stress_value', 'children'),
+	Output('text_stress_value', 'style'),
+	Input('graph_hr', 'figure'),
+	Input('graph_edr', 'figure'))
+def update_stress(value, color):
+	if value is None or color is None:
+		raise PreventUpdate
+	if synthetic.stress():
+		result = (HIGH, {'font': STRESS_SIZE, 'color': RED})
+	else:
+		result = (LOW, {'font': STRESS_SIZE, 'color': GREEN})
+	return result
+
+
 def settings():
 	return html.Div([
 		heading_panel(),
@@ -181,10 +213,10 @@ def settings():
 
 
 def layout():
-	return html.Div([settings(), plots()])
+	return html.Div([settings(), stress_level(), plots()])
 
 
 app.layout = layout()
 
 if __name__ == '__main__':
-	app.run_server(debug=False)
+	app.run_server(debug=True)
