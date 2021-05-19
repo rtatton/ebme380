@@ -18,9 +18,11 @@ contact Ryan Tatton at rdt17@protonmail.com with any questions or inquiries.
 All source code is contained within the `wsma` directory.
 
 The `app` package contains `app.py`, which is the user interface application of
-the system. The `connect.py` module containers the data access
-class `WearableDevice`, which allows data transduced and processed by the
-wearable device to be received by the application device.
+the system. It implements the dashboard with the `dash` library by Plotly. While
+it is mostly completed, except for a couple errors, it runs. The
+`connect.py` module containers the data access class `WearableDevice`, which
+allows data transduced and processed by the wearable device to be received by
+the application device.
 
 The `model` package contains the `drcn.py` module, which includes the `DRCN`
 class, and is the model used by the wearable stress measurement system to infer
@@ -58,6 +60,9 @@ In summary, the following are what remain to be done:
 - Finish implementing the `train.py` functions
 - Complete the Google Colab notebook
 - Train the model
+- Clean up and fix bugs with `app.py` (this runs, however)
+- Implement callbacks from the model in `app.py`
+- Implement real-time updating of the dashboard
 
 ## References
 
