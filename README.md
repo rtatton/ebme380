@@ -1,7 +1,5 @@
 # Wearable Stress Measurement System Application
 
-Last updated: 18 May 2021
-
 Application for the wearable stress measurement system for the 2020/2021 EBME
 senior design project of Team 4 at Case Western Reserve University. The
 deep-learning model is an implementation of the deep
@@ -10,8 +8,7 @@ satisfies all user needs for a wearable stress measurement system designed for
 the ICU.
 
 The following README provides a high level overview of the source code
-organization and what tasks remain after the first iteration of design. Please
-contact Ryan Tatton at rdt17@protonmail.com with any questions or inquiries.
+organization and what tasks remain after the first iteration of design.
 
 ## Organization
 
